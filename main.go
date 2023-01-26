@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path"
 	"strings"
@@ -67,6 +68,39 @@ func (l *Lexer) NextToken() (string, error) {
 		return strings.ToUpper(s), nil
 	}
 	return string(l.Chop(1)), nil
+}
+
+//	fn tf(t: &str, d: &TermFreq) -> f32 {
+//	    let a = d.get(t).cloned().unwrap_or(0) as f32;
+//	    let b = d.iter().map(|(_, f)| *f).sum::<usize>() as f32;
+//	    a / b
+//	}
+func tf(t string, d TermFreq) float32 {
+	a := float32(d[t])
+	var b float32
+	for _, value := range d {
+		b += float32(value)
+	}
+	return a / b
+}
+
+//	fn idf(t: &str, d: &TermFreqIndex) -> f32 {
+//	    let N = d.len() as f32;
+//	    let M = d.values().filter(|tf| tf.contains_key(t)).count().max(1) as f32;
+//	    return (N / M).log10();
+//	}
+func idf(t string, d TermFreqIndex) float32 {
+	N := float32(len(d))
+
+	occurrences := float32(0)
+	for _, tf := range d {
+		if _, ok := tf[t]; ok {
+			occurrences += 1
+		}
+	}
+	M := float32(math.Max(float64(occurrences), 1))
+
+	return float32(math.Log10(float64(N / M)))
 }
 
 func main() {
@@ -199,7 +233,22 @@ func entry() error {
 		return checkIndex(args[2])
 
 	case "serve":
-		break
+		if len(args) < 3 {
+			usage(program)
+			return fmt.Errorf("ERROR: no path to index is provided for %s subcommand", subcommand)
+		}
+		indexPath := args[2]
+		content, err := os.ReadFile(indexPath)
+		if err != nil {
+			return fmt.Errorf("ERROR: could not load %s: %s", indexPath, err)
+		}
+		var tfIndex TermFreqIndex
+		err = json.Unmarshal(content, &tfIndex)
+		if err != nil {
+			return fmt.Errorf("ERROR: could not serialize file %s as json: %s", indexPath, err)
+		}
+
+		startServe(tfIndex)
 
 	default:
 		usage(program)
