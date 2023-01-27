@@ -8,7 +8,7 @@ import (
 	"os"
 )
 
-func searchHandlerFactory(tfIndex TermFreqIndex) func(w http.ResponseWriter, r *http.Request) {
+func searchHandlerFactory(docs Documents) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/search" {
 			http.Error(w, "404 not found.", http.StatusNotFound)
@@ -35,7 +35,7 @@ func searchHandlerFactory(tfIndex TermFreqIndex) func(w http.ResponseWriter, r *
 
 		var result []ResultPair
 
-		for p, table := range tfIndex {
+		for _, doc := range docs {
 			rank := float32(0)
 			lexer := NewLexer(query)
 			for {
@@ -43,10 +43,10 @@ func searchHandlerFactory(tfIndex TermFreqIndex) func(w http.ResponseWriter, r *
 				if err != nil {
 					break
 				}
-				rank += tf(token, table) * idf(token, tfIndex)
+				rank += doc.TermFrequency(token) * docs.InverseDocumentFrequency(token)
 			}
 			if rank > 0 {
-				result = append(result, ResultPair{Path: p, Freq: rank})
+				result = append(result, ResultPair{Path: doc.Path, Freq: rank})
 			}
 		}
 
@@ -66,10 +66,10 @@ func searchHandlerFactory(tfIndex TermFreqIndex) func(w http.ResponseWriter, r *
 	}
 }
 
-func startServe(freqIndex TermFreqIndex) {
+func startServe(docs Documents) {
 	fileServer := http.FileServer(http.Dir("./static"))
 	http.Handle("/", fileServer)
-	http.HandleFunc("/search", searchHandlerFactory(freqIndex))
+	http.HandleFunc("/search", searchHandlerFactory(docs))
 
 	fmt.Printf("Starting server at port 6969\n")
 	if err := http.ListenAndServe(":6969", nil); err != nil {
